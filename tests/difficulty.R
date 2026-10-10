@@ -9,7 +9,11 @@
 #     coordinates the optimizers search, the unit cube of the search box
 #     initial_guess * (1 ± 1). The error is a sum of squares that is 0 at the
 #     truth, so its Hessian there is 2 J'J, J being the Jacobian of the
-#     residuals measured in standard errors;
+#     residuals measured in standard errors. Directions the targets say next
+#     to nothing about (a singular value below a millionth of the largest:
+#     the onset of the last age group, whose lesions have no time to become
+#     diagnosed cancers before 84) are counted apart, since they would make
+#     the condition number infinite without making the fit any harder;
 #   - how precisely the parameters have to be set for a chi-square of 1, i.e. a
 #     fit within one standard error overall, along the stiffest direction;
 #   - the weakest direction, the combination of parameters the targets say
@@ -81,7 +85,8 @@ for (name in names(schemes)) {
   }
   start <- unlist(lapply(seq_along(scheme$parameters), function(i) {
     columns <- (i - 1) * n.strata + 1:n.strata
-    log(truth[columns][c(1, 5, 9)] / x0[columns][c(1, 5, 9)])
+    anchors <- c(1, (n.strata + 1) / 2, n.strata)
+    log(truth[columns][anchors] / x0[columns][anchors])
   }))
   family <- optim(start, function(a) scheme.error(scheme, from.anchors(a))$error,
                   method='BFGS', control=list(maxit=500, reltol=1e-14))
@@ -89,13 +94,15 @@ for (name in names(schemes)) {
   cat(sprintf('\n== %s: %d parameters, %d targets\n', name, length(truth), nrow(J)))
   cat(sprintf('  error at the truth:          %.3g\n', scheme.error(scheme, truth)$error))
   cat(sprintf('  error at the initial guess:  %.4g\n', scheme.error(scheme, x0)$error))
-  cat(sprintf('  condition number (Hessian):  %.3g\n', (max(s$d) / min(s$d))^2))
+  identified <- s$d > 1e-6 * max(s$d)
+  cat(sprintf('  condition number (Hessian):  %.3g, over the %d identified directions (%d not)\n',
+              (max(s$d) / min(s$d[identified]))^2, sum(identified), sum(!identified)))
   cat(sprintf('  chi-square of 1 along the stiffest direction: a move of %.2g of the search box,\n', stiffest))
   cat(sprintf('    %.2g relative to the parameters at the truth\n',
               stiffest * sqrt(sum((s$v[, 1] * width / truth)^2))))
   cat(sprintf('  error floor of the smooth family: %.4g\n', family$value))
-  cat('  weakest direction, in the unit cube of the search box:\n')
-  weakest <- matrix(s$v[, ncol(J)], nrow=n.strata,
+  cat('  weakest identified direction, in the unit cube of the search box:\n')
+  weakest <- matrix(s$v[, sum(identified)], nrow=n.strata,
                     dimnames=list(get.strata(), scheme$parameters))
   print(round(weakest, 3))
 }

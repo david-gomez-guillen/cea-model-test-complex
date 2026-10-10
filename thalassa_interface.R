@@ -65,8 +65,35 @@ get.parameters <- function() {
   return(list(
     list(
       name='p.onset',
-      display.name='Annual probability of developing a (preclinical) cancer while healthy',
-      base.value=0.004,
+      display.name='Annual probability of developing a precursor lesion while healthy',
+      base.value=0.009,
+      distribution='beta',
+      class='Natural history',
+      min.value=0,
+      max.value=1
+    ),
+    list(
+      name='p.transformation',
+      display.name='Annual probability of a precursor lesion turning into a (preclinical local) cancer',
+      base.value=0.04,
+      distribution='beta',
+      class='Natural history',
+      min.value=0,
+      max.value=1
+    ),
+    list(
+      name='p.regression',
+      display.name='Annual probability of a precursor lesion going away on its own',
+      base.value=0.02,
+      distribution='beta',
+      class='Natural history',
+      min.value=0,
+      max.value=1
+    ),
+    list(
+      name='prevalence.precursor',
+      display.name='Share of the cohort carrying a precursor lesion at age 30',
+      base.value=0.05,
       distribution='beta',
       class='Natural history',
       min.value=0,
@@ -224,7 +251,7 @@ get.parameters <- function() {
 
 get.strata <- function() {
   # Hardcoded strata for the model. In a real application, these could be loaded from a file or database.
-  return(c('30-34', '35-39', '40-44', '45-49', '50-54', '55-59', '60-64', '65-69', '70-74'))
+  return(c('30-34', '35-39', '40-44', '45-49', '50-54', '55-59', '60-64', '65-69', '70-74', '75-79', '80-84'))
 }
 
 get.model.states <- function() {
@@ -233,14 +260,15 @@ get.model.states <- function() {
   # sync with it.
   return(list(
     title='Model states',
-    description='The seven states of the cohort and the monthly transitions between them. Death from other causes, possible from every living state, is drawn from Healthy only. Hover a state or a transition for what drives it.',
+    description='The eight states of the cohort and the monthly transitions between them. Death from other causes, possible from every living state, is drawn from Healthy only. Hover a state or a transition for what drives it.',
     nodes=data.frame(
-      id=c('healthy', 'preclinical.local', 'preclinical.advanced',
+      id=c('healthy', 'precursor', 'preclinical.local', 'preclinical.advanced',
            'diagnosed.local', 'diagnosed.advanced', 'cancer.death', 'other.death'),
-      label=c('Healthy', 'Preclinical local', 'Preclinical advanced',
+      label=c('Healthy', 'Precursor', 'Preclinical local', 'Preclinical advanced',
               'Diagnosed local', 'Diagnosed advanced', 'Cancer death', 'Other death'),
       description=c(
-        'Alive and cancer-free. The whole cohort starts here.',
+        'Alive and cancer-free. Most of the cohort starts here.',
+        'A precursor lesion: harmless in itself, it can go away or, after many years, turn into a cancer. Part of the cohort starts here.',
         'A local cancer nobody knows about yet: no symptoms, no costs, no loss of health.',
         'An advanced cancer nobody knows about yet: no symptoms, no costs, no loss of health.',
         'A local cancer, diagnosed after causing symptoms or found by screening.',
@@ -250,13 +278,15 @@ get.model.states <- function() {
       )
     ),
     edges=data.frame(
-      from=c('healthy', 'preclinical.local', 'preclinical.local', 'preclinical.advanced',
+      from=c('healthy', 'precursor', 'precursor', 'preclinical.local', 'preclinical.local', 'preclinical.advanced',
              'diagnosed.local', 'diagnosed.advanced', 'healthy'),
-      to=c('preclinical.local', 'preclinical.advanced', 'diagnosed.local', 'diagnosed.advanced',
+      to=c('precursor', 'healthy', 'preclinical.local', 'preclinical.advanced', 'diagnosed.local', 'diagnosed.advanced',
            'cancer.death', 'cancer.death', 'other.death'),
-      label=c('Onset', 'Progression', 'Symptoms', 'Symptoms', 'Death', 'Death', 'Death'),
+      label=c('Onset', 'Regression', 'Transformation', 'Progression', 'Symptoms', 'Symptoms', 'Death', 'Death', 'Death'),
       description=c(
         'p.onset, one value per age group.',
+        'p.regression',
+        'p.transformation',
         'p.progression, one value per age group.',
         'p.symptoms.local, plus a share screening.sensitivity.local once a year under screening.',
         'p.symptoms.advanced, plus a share screening.sensitivity.advanced once a year under screening.',
@@ -282,6 +312,9 @@ run.simulation <- function(strategies, pars) {
   # This is a simple mapping based on the parameter names.
   results <- simulate(strategies,
                       p.onset=pars[['p.onset']],
+                      p.transformation=pars[['p.transformation']],
+                      p.regression=pars[['p.regression']],
+                      prevalence.precursor=pars[['prevalence.precursor']],
                       p.progression=pars[['p.progression']],
                       p.symptoms.local=pars[['p.symptoms.local']],
                       p.symptoms.advanced=pars[['p.symptoms.advanced']],
@@ -321,74 +354,86 @@ CALIBRATION.TARGETS <- list(
   # TARGETS-BEGIN
   incidence=list(
     `Cancer incidence`=list(
-      `30-34`=8.941149993,
-      `35-39`=31.19871784,
-      `40-44`=57.18714078,
-      `45-49`=91.20702362,
-      `50-54`=137.0903512,
-      `55-59`=196.7787718,
-      `60-64`=270.312149,
-      `65-69`=355.501592,
-      `70-74`=447.7241717
+      `30-34`=50.85249511,
+      `35-39`=139.1913367,
+      `40-44`=173.5480996,
+      `45-49`=190.9636441,
+      `50-54`=212.3728947,
+      `55-59`=243.2532977,
+      `60-64`=283.7885432,
+      `65-69`=332.4834432,
+      `70-74`=387.1516901,
+      `75-79`=445.2029849,
+      `80-84`=503.810493
     )
   ),
   natural_history=list(
     `Cancer incidence`=list(
-      `30-34`=8.160013707,
-      `35-39`=29.35672098,
-      `40-44`=55.14563103,
-      `45-49`=89.46250253,
-      `50-54`=137.0785634,
-      `55-59`=201.2413186,
-      `60-64`=281.407703,
-      `65-69`=372.1073134,
-      `70-74`=466.3764311
+      `30-34`=46.41061664,
+      `35-39`=131.8919366,
+      `40-44`=170.47127,
+      `45-49`=191.2227614,
+      `50-54`=215.5896038,
+      `55-59`=250.6165472,
+      `60-64`=295.7209289,
+      `65-69`=346.985186,
+      `70-74`=401.5142988,
+      `75-79`=458.093441,
+      `80-84`=515.206148
     ),
     `Local stage share`=list(
-      `30-34`=33.38802177,
-      `35-39`=22.66253904,
-      `40-44`=19.87406777,
-      `45-49`=18.46813122,
-      `50-54`=16.90863865,
-      `55-59`=14.94430577,
-      `60-64`=12.92561824,
-      `65-69`=11.33467416,
-      `70-74`=10.30356499
+      `30-34`=33.20626259,
+      `35-39`=20.04804185,
+      `40-44`=16.59916109,
+      `45-49`=15.546758,
+      `50-54`=14.71764295,
+      `55-59`=13.4551985,
+      `60-64`=11.95898018,
+      `65-69`=10.71976893,
+      `70-74`=9.931546943,
+      `75-79`=9.484468459,
+      `80-84`=9.218606732
     )
   ),
   full=list(
     `Cancer incidence`=list(
-      `30-34`=8.159962169,
-      `35-39`=29.35409689,
-      `40-44`=55.13025243,
-      `45-49`=89.42020391,
-      `50-54`=137.0041113,
-      `55-59`=201.1720375,
-      `60-64`=281.4978105,
-      `65-69`=372.7347152,
-      `70-74`=468.2163084
+      `30-34`=46.40892883,
+      `35-39`=131.8258415,
+      `40-44`=170.2345193,
+      `45-49`=190.8312578,
+      `50-54`=215.1160686,
+      `55-59`=250.1408725,
+      `60-64`=295.3536205,
+      `65-69`=346.9074646,
+      `70-74`=402.0028822,
+      `75-79`=459.527787,
+      `80-84`=518.0606602
     ),
     `Local stage share`=list(
-      `30-34`=33.38802177,
-      `35-39`=22.66253904,
-      `40-44`=19.87406777,
-      `45-49`=18.46813122,
-      `50-54`=16.90863865,
-      `55-59`=14.94430577,
-      `60-64`=12.92561824,
-      `65-69`=11.33467416,
-      `70-74`=10.30356499
+      `30-34`=33.20626259,
+      `35-39`=20.04804185,
+      `40-44`=16.59916109,
+      `45-49`=15.546758,
+      `50-54`=14.71764295,
+      `55-59`=13.4551985,
+      `60-64`=11.95898018,
+      `65-69`=10.71976893,
+      `70-74`=9.931546943,
+      `75-79`=9.484468459,
+      `80-84`=9.218606732
     ),
     `Cancer mortality`=list(
-      `30-34`=0.8485415985,
-      `35-39`=7.973117318,
-      `40-44`=23.59907652,
-      `45-49`=48.19171855,
-      `50-54`=84.71126614,
-      `55-59`=137.9527083,
-      `60-64`=211.9398999,
-      `65-69`=305.8253014,
-      `70-74`=412.8647573
+      `30-34`=4.867405005,
+      `35-39`=40.35940546,
+      `40-44`=91.88654903,
+      `45-49`=136.5591606,
+      `50-54`=173.496587,
+      `55-59`=210.8214978,
+      `60-64`=255.639788,
+      `65-69`=309.7647898,
+      `70-74`=370.8301196,
+      `75-79`=436.07306,
+      `80-84`=503.6795681
     )
   )
   # TARGETS-END
@@ -397,31 +442,31 @@ CALIBRATION.TARGETS <- list(
 get.calibration.schemes <- function() {
   return(list(
     incidence=list(
-      description='Onset by age group against cancer incidence (9 values, 9 targets)',
+      description='Onset by age group against cancer incidence (11 values, 11 targets)',
       parameters='p.onset',
       target=CALIBRATION.TARGETS$incidence,
       strata=get.strata(),
-      initial_guess=rep(.004, 9),
+      initial_guess=rep(.009, 11),
       error_function=calibration.error,
       latent_space_training_set=generate.training.dataset,
       other.plots=list(relative.deviation.plot(CALIBRATION.TARGETS$incidence))
     ),
     natural_history=list(
-      description='Onset and progression by age group against incidence and stage at diagnosis (18 values, 18 targets)',
+      description='Onset and progression by age group against incidence and stage at diagnosis (22 values, 22 targets)',
       parameters=c('p.onset', 'p.progression'),
       target=CALIBRATION.TARGETS$natural_history,
       strata=get.strata(),
-      initial_guess=c(rep(.004, 9), rep(.3, 9)),
+      initial_guess=c(rep(.009, 11), rep(.3, 11)),
       error_function=calibration.error,
       latent_space_training_set=generate.training.dataset,
       other.plots=list(relative.deviation.plot(CALIBRATION.TARGETS$natural_history))
     ),
     full=list(
-      description='Onset, progression and cancer death by age group against incidence, stage at diagnosis and mortality (27 values, 27 targets)',
+      description='Onset, progression and cancer death by age group against incidence, stage at diagnosis and mortality (33 values, 33 targets)',
       parameters=c('p.onset', 'p.progression', 'p.cancer.death'),
       target=CALIBRATION.TARGETS$full,
       strata=get.strata(),
-      initial_guess=c(rep(.004, 9), rep(.3, 9), rep(.2, 9)),
+      initial_guess=c(rep(.009, 11), rep(.3, 11), rep(.2, 11)),
       error_function=calibration.error,
       latent_space_training_set=generate.training.dataset,
       other.plots=list(relative.deviation.plot(CALIBRATION.TARGETS$full))

@@ -3,18 +3,18 @@
 # sends the LLM every .R file of the model but those under tests/, which is why
 # this lives here.
 #
-# Each profile is given at the middle of each five-year age group (32, ..., 72).
+# Each profile is given at the middle of each five-year age group (32, ..., 82).
 # They are smooth, as the training set of the latent space assumes, but not all
 # of the family it draws from: onset and cancer death are log-quadratic and
 # log-linear, which it holds, while progression is logistic, which it can only
 # approximate.
 
-TRUE.AGES <- seq(32, 72, by=5)
+TRUE.AGES <- seq(32, 82, by=5)
 
 true.profiles <- function() {
-  t <- (TRUE.AGES - 52) / 20
+  t <- (TRUE.AGES - 57) / 25
   list(
-    p.onset=0.002 * exp(1.4 * t - 0.35 * t^2),
+    p.onset=0.007 * exp(0.9 * t - 0.3 * t^2),
     p.progression=0.24 + 0.18 / (1 + exp(-(TRUE.AGES - 60) / 6)),
     p.cancer.death=0.18 * exp(0.45 * t)
   )

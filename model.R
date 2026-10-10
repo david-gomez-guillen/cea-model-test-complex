@@ -5,16 +5,19 @@
 # track of which share of a group of people, the cohort, is in each health state,
 # and moves those shares from state to state once a month.
 #
-# The cancer starts silently. For a while it is preclinical: it is there, but
-# nobody knows, and it can grow from a local to an advanced tumour before it
-# causes symptoms. Only when it does is it diagnosed, and only diagnosed cancers
-# are seen by a cancer registry. Most of what drives the disease is therefore
-# never observed directly, and has to be inferred from what registries report.
+# The cancer starts silently, and slowly. First comes a precursor lesion, which
+# is common, harmless in itself and can disappear on its own, but which turns
+# into a cancer in some people after many years. The cancer is then preclinical
+# for a while: it is there, but nobody knows, and it can grow from a local to an
+# advanced tumour before it causes symptoms. Only when it does is it diagnosed,
+# and only diagnosed cancers are seen by a cancer registry. Most of what drives
+# the disease is therefore never observed directly, and what is observed today
+# was set in motion one or two decades ago.
 #
-#   States:      Healthy, Preclinical local, Preclinical advanced,
+#   States:      Healthy, Precursor, Preclinical local, Preclinical advanced,
 #                Diagnosed local, Diagnosed advanced, Cancer death, Other death
 #   Cycle:       one month
-#   Horizon:     from age 30 to age 74
+#   Horizon:     from age 30 to age 84
 #   Strategies:  no_intervention, screening, treatment
 #
 # For each strategy the model adds up what the cohort costs and how much health
@@ -22,13 +25,13 @@
 # cost-effectiveness analysis does.
 
 START.AGE <- 30
-END.AGE <- 74
+END.AGE <- 84
 CYCLES.PER.YEAR <- 12
 
-# Results by age are reported per five-year age group: 30-34, 35-39, ..., 70-74.
+# Results by age are reported per five-year age group: 30-34, 35-39, ..., 80-84.
 AGE.GROUP.SIZE <- 5
 
-STATES <- c('healthy',
+STATES <- c('healthy', 'precursor',
             'preclinical.local', 'preclinical.advanced',
             'diagnosed.local', 'diagnosed.advanced',
             'cancer.death', 'other.death')
@@ -65,6 +68,9 @@ monthly.transitions <- function(hazards) {
 
 simulate <- function(strategies,
                      p.onset,
+                     p.transformation,
+                     p.regression,
+                     prevalence.precursor,
                      p.progression,
                      p.symptoms.local,
                      p.symptoms.advanced,
@@ -106,23 +112,25 @@ simulate <- function(strategies,
     treatment <- strategy == 'treatment'
 
     # What a person in each state costs in a year, and the quality of life of
-    # that year: 1 is a year in full health and 0 is being dead. A preclinical
-    # cancer causes no symptoms, so it costs nothing and takes no health away.
-    state.costs <- c(healthy = 0,
+    # that year: 1 is a year in full health and 0 is being dead. Neither a
+    # precursor nor a preclinical cancer causes symptoms, so they cost nothing
+    # and take no health away.
+    state.costs <- c(healthy = 0, precursor = 0,
                      preclinical.local = 0, preclinical.advanced = 0,
                      diagnosed.local = cost.care.local + if (treatment) cost.treatment else 0,
                      diagnosed.advanced = cost.care.advanced + if (treatment) cost.treatment else 0,
                      cancer.death = 0, other.death = 0)
-    state.utilities <- c(healthy = 1,
+    state.utilities <- c(healthy = 1, precursor = 1,
                          preclinical.local = 1, preclinical.advanced = 1,
                          diagnosed.local = utility.local,
                          diagnosed.advanced = utility.advanced,
                          cancer.death = 0, other.death = 0)
 
     # ---- The cohort ---------------------------------------------------------
-    # The share of the cohort in each state. Everyone starts healthy, and the
-    # shares always add up to 1.
-    cohort <- setNames(c(1, 0, 0, 0, 0, 0, 0), STATES)
+    # The share of the cohort in each state. At 30, some people already carry a
+    # precursor lesion and everyone else is healthy. The shares always add up
+    # to 1.
+    cohort <- setNames(c(1 - prevalence.precursor, prevalence.precursor, 0, 0, 0, 0, 0, 0), STATES)
 
     # One value per month, filled in as the cohort ages.
     n.cycles <- length(ages) * CYCLES.PER.YEAR
@@ -143,6 +151,8 @@ simulate <- function(strategies,
       # given per age group are read at the current age. Death from other
       # causes grows exponentially with age (Gompertz), as in life tables.
       h.onset <- annual.hazard(value.at.age(p.onset, age), 'p.onset')
+      h.transformation <- annual.hazard(value.at.age(p.transformation, age), 'p.transformation')
+      h.regression <- annual.hazard(value.at.age(p.regression, age), 'p.regression')
       h.progression <- annual.hazard(value.at.age(p.progression, age), 'p.progression')
       h.symptoms.local <- annual.hazard(p.symptoms.local, 'p.symptoms.local')
       h.symptoms.advanced <- annual.hazard(p.symptoms.advanced, 'p.symptoms.advanced')
@@ -153,23 +163,26 @@ simulate <- function(strategies,
 
       # ---- 2. Transition matrix -----------------------------------------------
       # Row: the state a person is in now. Column: the state a month later. A
+      # precursor either goes away or, rarely, turns into a local cancer. A
       # preclinical cancer either grows or causes symptoms and is diagnosed at
       # the stage it has reached. Only diagnosed cancers kill, a local one far
       # less than an advanced one. The two dead states are absorbing.
-      hazards <- matrix(0, nrow = 7, ncol = 7, dimnames = list(STATES, STATES))
-      hazards['healthy', 'preclinical.local'] <- h.onset
+      hazards <- matrix(0, nrow = 8, ncol = 8, dimnames = list(STATES, STATES))
+      hazards['healthy', 'precursor'] <- h.onset
+      hazards['precursor', 'healthy'] <- h.regression
+      hazards['precursor', 'preclinical.local'] <- h.transformation
       hazards['preclinical.local', 'preclinical.advanced'] <- h.progression
       hazards['preclinical.local', 'diagnosed.local'] <- h.symptoms.local
       hazards['preclinical.advanced', 'diagnosed.advanced'] <- h.symptoms.advanced
       hazards['diagnosed.local', 'cancer.death'] <- h.cancer.death * rr.cancer.death.local
       hazards['diagnosed.advanced', 'cancer.death'] <- h.cancer.death
-      hazards[1:5, 'other.death'] <- h.other.death
+      hazards[1:6, 'other.death'] <- h.other.death
       transitions <- monthly.transitions(hazards)
 
       for (month in 1:CYCLES.PER.YEAR) {
         cycle <- cycle + 1
         discount.factor <- 1 / (1 + discount)^((cycle - 1) / CYCLES.PER.YEAR)
-        alive <- sum(cohort[1:5])
+        alive <- sum(cohort[1:6])
         new.local <- 0
         new.advanced <- 0
         screening.cost <- 0
@@ -181,7 +194,7 @@ simulate <- function(strategies,
         if (screening && month == 1) {
           found.local <- cohort[['preclinical.local']] * screening.sensitivity.local
           found.advanced <- cohort[['preclinical.advanced']] * screening.sensitivity.advanced
-          screening.cost <- sum(cohort[1:3]) * cost.screening
+          screening.cost <- sum(cohort[1:4]) * cost.screening
           cohort[['preclinical.local']] <- cohort[['preclinical.local']] - found.local
           cohort[['diagnosed.local']] <- cohort[['diagnosed.local']] + found.local
           cohort[['preclinical.advanced']] <- cohort[['preclinical.advanced']] - found.advanced
@@ -207,7 +220,7 @@ simulate <- function(strategies,
         person.years[cycle] <- alive / CYCLES.PER.YEAR
         diagnoses[cycle] <- new.local + new.advanced
         local.diagnoses[cycle] <- new.local
-        cancer.deaths[cycle] <- sum(cohort[1:5] * transitions[1:5, 'cancer.death'])
+        cancer.deaths[cycle] <- sum(cohort[1:6] * transitions[1:6, 'cancer.death'])
 
         # ---- 6. Move the cohort one month forward -----------------------------
         # Multiplying the shares by the matrix sends each share to where its row
