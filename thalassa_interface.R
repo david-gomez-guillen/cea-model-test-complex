@@ -449,7 +449,7 @@ get.calibration.schemes <- function() {
       initial_guess=rep(.009, 11),
       error_function=calibration.error,
       latent_space_training_set=generate.training.dataset,
-      other.plots=list(relative.deviation.plot(CALIBRATION.TARGETS$incidence))
+      evaluation.plots=list(`Deviation from the target`=relative.deviation.plot(CALIBRATION.TARGETS$incidence))
     ),
     natural_history=list(
       description='Onset and progression by age group against incidence and stage at diagnosis (22 values, 22 targets)',
@@ -459,7 +459,7 @@ get.calibration.schemes <- function() {
       initial_guess=c(rep(.009, 11), rep(.3, 11)),
       error_function=calibration.error,
       latent_space_training_set=generate.training.dataset,
-      other.plots=list(relative.deviation.plot(CALIBRATION.TARGETS$natural_history))
+      evaluation.plots=list(`Deviation from the target`=relative.deviation.plot(CALIBRATION.TARGETS$natural_history))
     ),
     full=list(
       description='Onset, progression and cancer death by age group against incidence, stage at diagnosis and mortality (33 values, 33 targets)',
@@ -469,7 +469,7 @@ get.calibration.schemes <- function() {
       initial_guess=c(rep(.009, 11), rep(.3, 11), rep(.2, 11)),
       error_function=calibration.error,
       latent_space_training_set=generate.training.dataset,
-      other.plots=list(relative.deviation.plot(CALIBRATION.TARGETS$full))
+      evaluation.plots=list(`Deviation from the target`=relative.deviation.plot(CALIBRATION.TARGETS$full))
     )))
 }
 
